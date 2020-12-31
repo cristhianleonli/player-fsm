@@ -1,92 +1,160 @@
 ﻿using UnityEngine;
+using Player.Audio;
+using Player.ParticleEffects;
+using Player.StateMachine;
+using Player.StateMachine.States;
+using System.Threading;
 
-public class PlayerController : MonoBehaviour
+namespace Player
 {
-    #region Components
-    public Animator Animator { get; private set; }
-    public Rigidbody2D Rigidbody { get; private set; }
-    public SpriteRenderer SpriteRenderer { get; private set; }
-    
-    public InputHandler InputHandler { get; private set; }
-    #endregion
-
-    #region State Machine
-    public PlayerStateMachine StateMachine { get; private set; }
-    public PlayerIdleState IdleState { get; private set; }
-    public PlayerJumpState JumpingState { get; private set; }
-    public PlayerRunState RunningState { get; private set; }
-    public PlayerCrouchState CrouchingState { get; private set; }
-    #endregion
-    
-    #region Other variables
-    public Vector2 CurrentVelocity { get; private set; }
-    private Vector2 workspace;
-    [SerializeField] private Transform groundCheck;
-    [SerializeField] private PlayerData playerData;
-    private int facingDirection = -1;
-    #endregion
-
-    private void Awake()
-    { 
-        StateMachine = new PlayerStateMachine();
-        IdleState = new PlayerIdleState(this, StateMachine, playerData);
-        RunningState = new PlayerRunState(this, StateMachine, playerData);
-        JumpingState = new PlayerJumpState(this, StateMachine, playerData);
-        CrouchingState = new PlayerCrouchState(this, StateMachine, playerData);
-    }
-
-    private void Start()
-    { 
-        Animator = GetComponent<Animator>();
-        Rigidbody = GetComponent<Rigidbody2D>();
-        SpriteRenderer = GetComponent<SpriteRenderer>();
-        SpriteRenderer = GetComponent<SpriteRenderer>();
-        InputHandler = GetComponent<InputHandler>();
-        StateMachine.Initiliaze(IdleState);
-    }
-
-    private void Update()
+    public class PlayerController : MonoBehaviour
     {
-        CurrentVelocity = Rigidbody.velocity;
-        StateMachine.CurrentState.LogicUpdate();
-    }
+        public Animator animator;
 
-    private void FixedUpdate()
-    {
-        StateMachine.CurrentState.PhysicsUpdate();
-    }
+        #region State machine
+        public PlayerStateMachine StateMachine { get; private set; }
+        public PlayerIdleState IdleState { get; private set; }
+        public PlayerMoveState MoveState { get; private set; }
+        public PlayerJumpState JumpState { get; private set; }
+        public PlayerInAirState InAirState { get; private set; }
+        public PlayerLandState LandState { get; private set; }
+        public PlayerWallSlideState WallSlideState { get; private set; }
+        public PlayerWallJumpState WallJumpState { get; private set; }
+        public PlayerDashState DashState { get; private set; }
+        #endregion
 
-    public void SetXVelocity(float velocity)
-    {
-        Rigidbody.velocity = new Vector2(velocity, Rigidbody.velocity.y);
-        workspace.Set(velocity, CurrentVelocity.y);
-        Rigidbody.velocity = workspace;
-        CurrentVelocity = workspace;
-    }
-    
-    public void SetYVelocity(float velocity)
-    {
-        workspace.Set(CurrentVelocity.x, velocity);
-        Rigidbody.velocity = workspace;
-        CurrentVelocity = workspace;
-    }
+        public PlayerInputHandler InputHandler { get; private set; }
+        public Rigidbody2D rb { get; private set; }
+        public Vector2 CurrentVelocity { get; private set; }
+        public int FacingDirection { get; private set; }
 
-    public void CheckIfShouldFlip(int inputX)
-    {
-        if (inputX != 0 && inputX != facingDirection)
+        private Vector2 workspace;
+        private float changeTime;
+
+        [SerializeField] private AudioManager audioManager;
+        [SerializeField] private ParticlesManager particlesManager;
+        [SerializeField] private PlayerData playerData;
+        [SerializeField] private Transform groundCheck;
+        [SerializeField] private Transform wallCheck;
+
+        #region life cycle
+        private void Awake()
         {
-            Flip();
+            StateMachine = new PlayerStateMachine();
+            CreateStates();
         }
-    }
 
-    public bool CheckIfGrounded()
-    {
-        return Physics2D.OverlapCircle(groundCheck.position, playerData.checkGroundRadius, playerData.whatIsGround);
-    }
+        void Start()
+        {
+            FacingDirection = 1;
 
-    private void Flip()
-    {
-        facingDirection *= -1;
-        transform.Rotate(0f, 180f, 0f);
+            animator = GetComponent<Animator>();
+            InputHandler = GetComponent<PlayerInputHandler>();
+            rb = GetComponent<Rigidbody2D>();
+
+            StateMachine.Initialize(IdleState);
+        }
+
+        private void Update()
+        {
+            CurrentVelocity = rb.velocity;
+            StateMachine.CurrentState.LogicUpdate();
+        }
+
+        private void FixedUpdate()
+        {
+            StateMachine.CurrentState.PhysicsUpdate();
+        }
+        #endregion
+
+        private void CreateStates()
+        {
+            IdleState = new PlayerIdleState(this, StateMachine, playerData, "idle");
+            MoveState = new PlayerMoveState(this, StateMachine, playerData, "move");
+            JumpState = new PlayerJumpState(this, StateMachine, playerData, "inAir");
+            InAirState = new PlayerInAirState(this, StateMachine, playerData, "inAir");
+            LandState = new PlayerLandState(this, StateMachine, playerData, "land");
+            WallSlideState = new PlayerWallSlideState(this, StateMachine, playerData, "wallSlide");
+            WallJumpState = new PlayerWallJumpState(this, StateMachine, playerData, "inAir");
+            DashState = new PlayerDashState(this, StateMachine, playerData, "inAir");
+        }
+
+        public void SetVelocityX(float velocity)
+        {
+            workspace.Set(velocity, CurrentVelocity.y);
+            rb.velocity = workspace;
+            CurrentVelocity = workspace;
+        }
+
+        public void SetVelocityY(float velocity)
+        {
+            workspace.Set(CurrentVelocity.x, velocity);
+            rb.velocity = workspace;
+            CurrentVelocity = workspace;
+        }
+
+        public void SetVelocity(float velocity, Vector2 angle, int direction)
+        {
+            angle.Normalize();
+            workspace.Set(angle.x * velocity * direction, angle.y * velocity);
+            rb.velocity = workspace;
+            CurrentVelocity = workspace;
+        }
+
+        public bool IsTouchingGround()
+        {
+            return Physics2D.OverlapCircle(
+                groundCheck.position,
+                playerData.groundCheckRadius,
+                playerData.whatIsGround
+            );
+        }
+
+        public bool IsTouchingWall()
+        {
+            return Physics2D.Raycast(
+                wallCheck.position,
+                Vector2.right * FacingDirection,
+                playerData.wallCheckDistance,
+                playerData.whatIsGround
+            );
+        }
+
+        public bool IsTouchingWallBack()
+        {
+            return Physics2D.Raycast(
+                wallCheck.position,
+                Vector2.right * -FacingDirection,
+                playerData.wallCheckDistance,
+                playerData.whatIsGround
+            );
+        }
+
+        public void FlipIfNeeded(int inputX)
+        {
+            if (inputX != 0 && inputX != FacingDirection)
+            {
+                FacingDirection *= -1;
+                transform.Rotate(0, 180, 0);
+            }
+        }
+
+        public void AnimationFinishTrigger() => StateMachine.CurrentState.AnimationFinishTrigger();
+
+        #region Particle effects
+        public void ShowJumpDust() => particlesManager.ShowJumpDust();
+        public void ShowTrail() => particlesManager.ShowTrail();
+        public void HideTrail() => particlesManager.HideTrail();
+        public void ShowLandDust() => particlesManager.ShowLandDust();
+        public void ShowDashDust() => particlesManager.ShowDashDust();
+        #endregion
+
+        #region Sound effects
+        public void PlayWalkSound() => audioManager.PlayWalkSound();
+        public void StopWalkSound() => audioManager.StopWalkSound();
+        public void PlayLandSound() => audioManager.PlayLandSound();
+        public void PlayJumpSound() => audioManager.PlayJumpSound();
+        public void PlayDashSound() => audioManager.PlayDashSound();
+        #endregion
     }
 }
