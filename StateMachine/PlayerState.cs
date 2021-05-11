@@ -1,47 +1,49 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
 
 namespace Player.StateMachine
 {
     public class PlayerState
     {
+        #region Inherited properties
         protected PlayerController player;
         protected PlayerStateMachine stateMachine;
         protected PlayerData playerData;
         protected float startTime;
-        protected bool isAnimationFinished;
+        protected int InputX;
+        protected bool InputJump;
         protected bool isExitingState;
+        #endregion
 
-        private string animBoolName;
+        private readonly string animationName;
 
-        protected bool dashInput;
-
-        public PlayerState(PlayerController player, PlayerStateMachine stateMachine, PlayerData playerData, string animBoolName)
+        public PlayerState(PlayerController player, PlayerStateMachine stateMachine, PlayerData playerData, string animationName)
         {
             this.player = player;
             this.stateMachine = stateMachine;
             this.playerData = playerData;
-            this.animBoolName = animBoolName;
+            this.animationName = animationName;
         }
 
         public virtual void Enter()
         {
             RunChecks();
 
-            player.animator.SetBool(animBoolName, true);
+            player.Animator.Play(animationName);
             startTime = Time.time;
-            isAnimationFinished = false;
             isExitingState = false;
         }
 
         public virtual void Exit()
         {
-            player.animator.SetBool(animBoolName, false);
             isExitingState = true;
         }
 
         public virtual void LogicUpdate()
         {
-            dashInput = player.InputHandler.DashInput;
+            InputX = player.InputHandler.InputX;
+            InputJump = player.InputHandler.JumpInput;
         }
 
         public virtual void PhysicsUpdate()
@@ -51,9 +53,6 @@ namespace Player.StateMachine
 
         public virtual void RunChecks() { }
 
-        public virtual void AnimationStartTrigger() { }
-
-        public virtual void AnimationFinishTrigger() => isAnimationFinished = true;
+        public virtual void AnimationFinishTrigger() { }
     }
-
 }

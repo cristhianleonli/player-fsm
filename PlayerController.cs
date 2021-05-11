@@ -1,43 +1,36 @@
-﻿using UnityEngine;
-using Player.Audio;
-using Player.ParticleEffects;
-using Player.StateMachine;
+﻿using Player.StateMachine;
 using Player.StateMachine.States;
-using System.Threading;
+using UnityEngine;
 
 namespace Player
 {
+
+    enum FacingDirection
+    {
+        RIGHT = 1,
+        LEFT = -1
+    }
+
     public class PlayerController : MonoBehaviour
     {
-        public Animator animator;
-
         #region State machine
         public PlayerStateMachine StateMachine { get; private set; }
         public PlayerIdleState IdleState { get; private set; }
-        public PlayerMoveState MoveState { get; private set; }
+        public PlayerRunState RunState { get; private set; }
         public PlayerJumpState JumpState { get; private set; }
-        public PlayerInAirState InAirState { get; private set; }
         public PlayerLandState LandState { get; private set; }
-        public PlayerWallSlideState WallSlideState { get; private set; }
-        public PlayerWallJumpState WallJumpState { get; private set; }
-        public PlayerDashState DashState { get; private set; }
         #endregion
 
+        public Animator Animator { get; private set; }
         public PlayerInputHandler InputHandler { get; private set; }
-        public Rigidbody2D rb { get; private set; }
+        public Rigidbody2D Rigidbody { get; private set; }
         public Vector2 CurrentVelocity { get; private set; }
-        public int FacingDirection { get; private set; }
 
-        private Vector2 workspace;
-        private float changeTime;
-
-        [SerializeField] private AudioManager audioManager;
-        [SerializeField] private ParticlesManager particlesManager;
-        [SerializeField] private PlayerData playerData;
+        private FacingDirection facingDirection = FacingDirection.RIGHT;
         [SerializeField] private Transform groundCheck;
-        [SerializeField] private Transform wallCheck;
+        [SerializeField] private PlayerData playerData;
 
-        #region life cycle
+        #region Life cycle
         private void Awake()
         {
             StateMachine = new PlayerStateMachine();
@@ -46,23 +39,26 @@ namespace Player
 
         void Start()
         {
-            FacingDirection = 1;
-
-            animator = GetComponent<Animator>();
+            Animator = GetComponent<Animator>();
             InputHandler = GetComponent<PlayerInputHandler>();
-            rb = GetComponent<Rigidbody2D>();
+            Rigidbody = GetComponent<Rigidbody2D>();
 
+            // start the state machine with the idle state
             StateMachine.Initialize(IdleState);
         }
 
         private void Update()
         {
-            CurrentVelocity = rb.velocity;
+            // keep the reference to the latest velocity the rigidbody has
+            CurrentVelocity = Rigidbody.velocity;
+
+            // let the state machine do its job with the current state
             StateMachine.CurrentState.LogicUpdate();
         }
 
         private void FixedUpdate()
         {
+            // let the state machine do its job with the current state
             StateMachine.CurrentState.PhysicsUpdate();
         }
         #endregion
@@ -70,91 +66,47 @@ namespace Player
         private void CreateStates()
         {
             IdleState = new PlayerIdleState(this, StateMachine, playerData, "idle");
-            MoveState = new PlayerMoveState(this, StateMachine, playerData, "move");
-            JumpState = new PlayerJumpState(this, StateMachine, playerData, "inAir");
-            InAirState = new PlayerInAirState(this, StateMachine, playerData, "inAir");
+            RunState = new PlayerRunState(this, StateMachine, playerData, "run");
+            JumpState = new PlayerJumpState(this, StateMachine, playerData, "jump");
             LandState = new PlayerLandState(this, StateMachine, playerData, "land");
-            WallSlideState = new PlayerWallSlideState(this, StateMachine, playerData, "wallSlide");
-            WallJumpState = new PlayerWallJumpState(this, StateMachine, playerData, "inAir");
-            DashState = new PlayerDashState(this, StateMachine, playerData, "inAir");
+        }
+
+        public void FlipIdNeeded(int inputX)
+        {
+            // only flip the player when the facing direction has changed
+            if (inputX != 0 && inputX != (int)facingDirection)
+            {
+                Flip();
+            }
         }
 
         public void SetVelocityX(float velocity)
         {
-            workspace.Set(velocity, CurrentVelocity.y);
-            rb.velocity = workspace;
-            CurrentVelocity = workspace;
+            // update the velocity in X of the player
+            Rigidbody.velocity = new Vector2(velocity, Rigidbody.velocity.y);
         }
 
         public void SetVelocityY(float velocity)
         {
-            workspace.Set(CurrentVelocity.x, velocity);
-            rb.velocity = workspace;
-            CurrentVelocity = workspace;
+            // update the velocity in Y of the player
+            Rigidbody.velocity = new Vector2(Rigidbody.velocity.x, velocity);
         }
 
-        public void SetVelocity(float velocity, Vector2 angle, int direction)
+        public bool CheckIfGrounded()
         {
-            angle.Normalize();
-            workspace.Set(angle.x * velocity * direction, angle.y * velocity);
-            rb.velocity = workspace;
-            CurrentVelocity = workspace;
+            // if the ground check overlaps with the ground wihtin a radius of a circle
+            return Physics2D.OverlapCircle(groundCheck.position, playerData.GroundCheckRadius, playerData.GroundLayer);
         }
 
-        public bool IsTouchingGround()
+        private void Flip()
         {
-            return Physics2D.OverlapCircle(
-                groundCheck.position,
-                playerData.groundCheckRadius,
-                playerData.whatIsGround
-            );
-        }
+            // toggle the facing direction
+            facingDirection = (facingDirection == FacingDirection.RIGHT) ? FacingDirection.LEFT : FacingDirection.RIGHT;
 
-        public bool IsTouchingWall()
-        {
-            return Physics2D.Raycast(
-                wallCheck.position,
-                Vector2.right * FacingDirection,
-                playerData.wallCheckDistance,
-                playerData.whatIsGround
-            );
-        }
-
-        public bool IsTouchingWallBack()
-        {
-            return Physics2D.Raycast(
-                wallCheck.position,
-                Vector2.right * -FacingDirection,
-                playerData.wallCheckDistance,
-                playerData.whatIsGround
-            );
-        }
-
-        public void FlipIfNeeded(int inputX)
-        {
-            if (inputX != 0 && inputX != FacingDirection)
-            {
-                FacingDirection *= -1;
-                transform.Rotate(0, 180, 0);
-            }
+            // apply roration to the game object
+            transform.Rotate(0f, 180f, 0f);
         }
 
         public void AnimationFinishTrigger() => StateMachine.CurrentState.AnimationFinishTrigger();
-
-        #region Particle effects
-        public void ShowJumpDust() => particlesManager.ShowJumpDust();
-        public void ShowTrail() => particlesManager.ShowTrail();
-        public void HideTrail() => particlesManager.HideTrail();
-        public void ShowLandDust() => particlesManager.ShowLandDust();
-        public void ShowDashDust() => particlesManager.ShowDashDust();
-        #endregion
-
-        #region Sound effects
-        public void PlayWalkSound() => audioManager.PlayWalkSound();
-        public void StopWalkSound() => audioManager.StopWalkSound();
-        public void PlayLandSound() => audioManager.PlayLandSound();
-        public void PlayJumpSound() => audioManager.PlayJumpSound();
-        public void PlayDashSound() => audioManager.PlayDashSound();
-        #endregion
     }
 }
