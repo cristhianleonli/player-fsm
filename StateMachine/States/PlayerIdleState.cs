@@ -36,12 +36,15 @@ namespace Player.StateMachine.States
             {
                 stateMachine.ChangeState(player.RunState);
             }
-
-            // Once the player hit the jump input, change the state to Jump
-            if (InputJump)
+            // the user is giving jump input
+            else if (InputJump)
             {
-                player.InputHandler.UseJumpInput();
                 stateMachine.ChangeState(player.JumpState);
+            }
+            // when the player is no longer touching the ground, is failling
+            else if (player.CheckIfGrounded() == false)
+            {
+                stateMachine.ChangeState(player.FallState);
             }
         }
 

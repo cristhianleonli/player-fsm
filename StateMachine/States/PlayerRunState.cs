@@ -1,7 +1,7 @@
 using Player;
 using Player.StateMachine;
 
-public class PlayerRunState: PlayerState
+public class PlayerRunState  : PlayerState
 {
     public PlayerRunState(PlayerController player, PlayerStateMachine stateMachine, PlayerData playerData, string animationName) : base(player, stateMachine, playerData, animationName)
     {

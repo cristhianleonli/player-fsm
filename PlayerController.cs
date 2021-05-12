@@ -18,7 +18,7 @@ namespace Player
         public PlayerIdleState IdleState { get; private set; }
         public PlayerRunState RunState { get; private set; }
         public PlayerJumpState JumpState { get; private set; }
-        public PlayerLandState LandState { get; private set; }
+        public PlayerFallState FallState { get; private set; }
         #endregion
 
         public Animator Animator { get; private set; }
@@ -29,11 +29,12 @@ namespace Player
         private FacingDirection facingDirection = FacingDirection.RIGHT;
         [SerializeField] private Transform groundCheck;
         [SerializeField] private PlayerData playerData;
+        [SerializeField] private bool debugStateMachine;
 
         #region Life cycle
         private void Awake()
         {
-            StateMachine = new PlayerStateMachine();
+            StateMachine = new PlayerStateMachine(debugStateMachine);
             CreateStates();
         }
 
@@ -68,7 +69,7 @@ namespace Player
             IdleState = new PlayerIdleState(this, StateMachine, playerData, "idle");
             RunState = new PlayerRunState(this, StateMachine, playerData, "run");
             JumpState = new PlayerJumpState(this, StateMachine, playerData, "jump");
-            LandState = new PlayerLandState(this, StateMachine, playerData, "land");
+            FallState = new PlayerFallState(this, StateMachine, playerData, "fall");
         }
 
         public void FlipIdNeeded(int inputX)
@@ -78,6 +79,18 @@ namespace Player
             {
                 Flip();
             }
+        }
+
+        public void SetVelocity(Vector2 velocity)
+        {
+            // set the velocity to the rigidbody
+            Rigidbody.velocity = velocity;
+        }
+
+        public void AddForce(Vector2 force)
+        {
+            // add a force to the rigidbody
+            Rigidbody.AddForce(force);
         }
 
         public void SetVelocityX(float velocity)
@@ -94,8 +107,8 @@ namespace Player
 
         public bool CheckIfGrounded()
         {
-            // if the ground check overlaps with the ground wihtin a radius of a circle
-            return Physics2D.OverlapCircle(groundCheck.position, playerData.GroundCheckRadius, playerData.GroundLayer);
+            RaycastHit2D raycast = Physics2D.Raycast(groundCheck.position, Vector2.down, playerData.GroundCheckRadius, playerData.GroundLayer);
+            return raycast.collider != null;
         }
 
         private void Flip()
